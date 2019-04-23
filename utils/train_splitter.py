@@ -30,7 +30,7 @@ def split(chunksize, overlap):
         )
         csv_path = os.path.join(TRAIN_PATH, "chunk" + str(int(i)) + ".csv")
         h5_path = os.path.join(TRAIN_H5_PATH, "chunk" + str(int(i)) + ".h5")
-        df.to_csv(csv_path, index=False)
+        # df.to_csv(csv_path, index=False)
         write_to_h5(filename=h5_path, df=df)
         print(i, j, df[: 1])
         del df
