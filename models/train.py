@@ -7,7 +7,7 @@ import os
 import gc
 import sys
 import numpy as np
-import pandas as import pd
+import pandas as pd
 from datetime import datetime
 
 ROOT = "/home/zebo/Workspace/kaggle/Kaggle-EarthQuakePrediction"
@@ -25,7 +25,7 @@ DC_EPOCH = 2 # Number of epochs for decaying
 class NNModelTrainer:
     
     # Split raw training data into chunks
-    _num_chunks = 7
+    _num_chunks = 5
     _chunk_index = 0
     
     # Load data row by row in to generator
@@ -56,19 +56,19 @@ class NNModelTrainer:
         self._overlap = overlap
         self._fs = block_size
 
-    def get_filepath(self):
+    def getFilepath(self):
         return os.path.join(H5_DATA_PATH, "chunk{}.h5".format(str(self._chunk_index)))
 
-    def load_chunk_data(self):
+    def loadChunkData(self):
         assert self._load_data, "Not a right time to load chunk data."
-        self._data = load_from_h5(self.get_filepath())
+        self._data = load_from_h5(self.getFilepath())
         self._data.columns = ["strain", "time"]
         self._data = self._data.astype(float)
         self._row_index = 0
         self._data_length = self._data.shape[0]
         self._chunk_index = (self._chunk_index + 1) % self._num_chunks
 
-    def process_data(self, raw_input):
+    def processData(self, raw_input):
         freq, times, spec = signal.spectrogram(
             raw_input, fs=self._fs, window=("kaiser", self._fft_win), nperseg=self._nperseg, noverlap=self._ffs_ol)
         p1 = max(0, NR - np.shape(spec)[0])
@@ -76,14 +76,14 @@ class NNModelTrainer:
         spec = np.pad(spec, [(0, p1), (0, p2)], mode='constant')
         return spec
 
-    def train_generator(self):
+    def trainGenerator(self):
         X = []
         Y = []
         while True:
             if self._load_data:
                 del self._data
                 gc.collect()
-                self.load_chunk_data()
+                self.loadChunkData()
             
             while self._row_index <= self._data_length - self._block_size:
                 img_ = self.process_data(
@@ -91,6 +91,7 @@ class NNModelTrainer:
                         self._data[self._row_index: self._row_index + self._block_length]["strain"].tolist()
                     )
                 )
+                print(img_.shape)
                 tar_ = self._data["time"].loc[self._row_index + self._block_length - 1]
                 X.append(img_)
                 Y.append(tar_)
@@ -114,14 +115,14 @@ class NNModelTrainer:
                 gc.collect()
             self._load_data = True
     
-    def load_model(self, model):
+    def loadModel(self, model):
         self._model = model
     
-    def load_model_from_file(model_file):
+    def loadWeightsFromFile(model_file):
         print("Loading model from {FILE} ...".format(FILE=model_file))
         self._model.load_weights(model_file)
     
-    def get_model(self):
+    def getModel(self):
         return self._model
 
     
@@ -166,5 +167,16 @@ class NNModelTrainer:
         callbacks=[earlystopper, checkpointer, change_lr], validation_data=self._valid_gen(), validation_steps=valid_steps,
         class_weight=class_weights)
         return history
-        
+
+def trainerTest():
+    trainer = NNModelTrainer()
+    trainer.trainGenerator()
+
+
+if __name__ == "__main__":
+    trainerTest()
+    
+
+
+
     
