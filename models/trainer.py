@@ -41,6 +41,7 @@ class NNModelTrainer:
     FFT_WINDOW = 5
     FFT_NPERSEG = 550
     FFT_OVERLAP = 50
+    FFT_DELTA = 1.E-8
     
     # Image size
     IMG_HEIGHT = 280
@@ -95,6 +96,7 @@ class NNModelTrainer:
         p1 = max(0, self.IMG_HEIGHT - spec.shape[0])
         p2 = max(0, self.IMG_WIDTH - spec.shape[1])
         spec = np.pad(spec, [(0, p1), (0, p2)], mode='constant')
+        spec = np.log(np.array(spec) + self.FFT_DELTA)
         return spec
     
     
