@@ -30,32 +30,34 @@ class NNModelTrainer:
     # loading data via chunks to void memory explosion
     NUM_TRAIN_CHUNKS = 5
     NUM_VALID_CHUNKS = 2
-    NUM_TRAIN_STEPS = 14065
-    NUM_VALID_STEPS = 5596
+    NUM_TRAIN_STEPS = 2815
+    NUM_VALID_STEPS = 1120
 
     # Block parameters that are processed with fft
     BLOCK_SIZE = 100000
-    BLOCK_STRIDE = 1000
+    BLOCK_STRIDE = 5000
     
     # FFT parameters
     FFT_WINDOW = 5
-    FFT_NPERSEG = 550
-    FFT_OVERLAP = 50
+    FFT_NPERSEG = 566
+    FFT_OVERLAP = 40
     FFT_DELTA = 1.E-8
+    FFT_CONVERTED_HEIGHT = 284
+    FFT_CONVERTED_WIDTH = 190
     
     # Image size
-    IMG_HEIGHT = 280
-    IMG_WIDTH = 200
+    IMG_HEIGHT = 288
+    IMG_WIDTH = 192
     
-    # Training Params
     BATCH_SIZE = 32
     
     # Model related:
+    _num_channel = 1
     _model = None
     _model_name = "Default_CNN"
     
-    def __init__(self):
-        pass
+    def __init__(self, num_channel=1):
+        self._num_channel = num_channel
     
     def loadChunkTrain(self, chunk_index=0):
         assert chunk_index < self.NUM_TRAIN_CHUNKS, "Invalid train chunk index " + str(chunk_index)
@@ -92,7 +94,9 @@ class NNModelTrainer:
         del freq
         del times
         gc.collect()
-        assert spec.shape == (276, 199), "Shape error, need fix!"
+        assert spec.shape == (
+            self.FFT_CONVERTED_HEIGHT,
+            self.FFT_CONVERTED_WIDTH), "Shape error, need fix!"
         p1 = max(0, self.IMG_HEIGHT - spec.shape[0])
         p2 = max(0, self.IMG_WIDTH - spec.shape[1])
         spec = np.pad(spec, [(0, p1), (0, p2)], mode='constant')
@@ -128,7 +132,8 @@ class NNModelTrainer:
             while row_index <= df_length - self.BLOCK_SIZE:
                 img_ = self.getSpectrum(
                     df["strain"][row_index: row_index + self.BLOCK_SIZE])
-                assert img_.shape == (self.IMG_HEIGHT, self.IMG_WIDTH)
+                img_ = np.stack(self._num_channel * [img_], axis=-1)
+                assert img_.shape == (self.IMG_HEIGHT, self.IMG_WIDTH, self._num_channel)
                 tar_ = df["time"].loc[row_index + self.BLOCK_SIZE - 1]
                 X.append(img_)
                 Y.append(tar_)
@@ -169,7 +174,7 @@ class NNModelTrainer:
     def loadModel(self, model):
         self._model = model
     
-    def loadWeightsFromFile(model_file=None):
+    def loadWeightsFromFile(self, model_file=None):
         if model_file is None:
             model_file = self.getModelName() + ".h5"
         model_file = os.path.join(ROOT, "nnmodels", model_file)
@@ -187,7 +192,9 @@ class NNModelTrainer:
         return self._model_name
 
     
-    def train(self, class_weights=None, learning_rate=0.02, decaying_rate=0.9, epochs=10, resume=False):
+    def train(
+        self, learning_rate=0.02, decaying_rate=0.9,
+        epochs_per_decay=2, epochs=10):
         '''train the model'''
         # compile the model first
         self._model.compile(
@@ -204,14 +211,17 @@ class NNModelTrainer:
 
         global GLR
         global GDR
+        global EPD
         ## Setting learning rate explicitly
         GLR = learning_rate
         GDR = decaying_rate
+        EPD = epochs_per_decay
         
         ## Adaptive learning rate changing
         def scheduler(epoch):
             global GLR
             global GDR
+            global EPD
             if epoch % EPD == 0:
                 GLR *= GDR
                 print("CURRENT LEARNING RATE = " + str(GLR))
@@ -229,13 +239,13 @@ class NNModelTrainer:
         train_steps = self.NUM_TRAIN_STEPS
         valid_steps = self.NUM_VALID_STEPS
 
-        history = self.model.fit_generator(
+        history = self._model.fit_generator(
             self.fitGeneratorTrain(),
             steps_per_epoch=train_steps,
             epochs=epochs,
             verbose=1, 
             callbacks=[earlystopper, checkpointer, change_lr],
-            validation_data=self.fitGeneratorValid,
+            validation_data=self.fitGeneratorValid(),
             validation_steps=valid_steps)
         return history
 
