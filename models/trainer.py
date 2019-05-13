@@ -15,7 +15,7 @@ from datetime import datetime
 from keras.optimizers import Adam
 from keras.callbacks import LearningRateScheduler, Callback, EarlyStopping, ModelCheckpoint
 
-ROOT = "/home/zebo/Workspace/kaggle/Kaggle-EarthQuakePrediction"
+ROOT = "/home/goodspeed/workspace/kaggle/earthquake"
 sys.path.append(ROOT)                       # Add root directory to the import path
 
 from utils.h5io import load_from_h5
@@ -28,10 +28,10 @@ EPD = 2                                     # Epochs per decaying
 class NNModelTrainer:
     """ Provide util methods for NN usage """
     # loading data via chunks to void memory explosion
-    NUM_TRAIN_CHUNKS = 5
-    NUM_VALID_CHUNKS = 2
-    NUM_TRAIN_STEPS = 2815
-    NUM_VALID_STEPS = 1120
+    NUM_TRAIN_CHUNKS = 6
+    NUM_VALID_CHUNKS = 1
+    NUM_TRAIN_STEPS = 3378
+    NUM_VALID_STEPS = 557
 
     # Block parameters that are processed with fft
     BLOCK_SIZE = 100000
@@ -141,7 +141,9 @@ class NNModelTrainer:
                 
                 # Yield batches
                 if len(X) == self.BATCH_SIZE:
+                    print("yielding data " + str(len(X)), str(len(Y)))
                     if len(Y) == self.BATCH_SIZE:
+                        print("yielding data " + str(len(X)), str(len(Y)))
                         yield (np.array(X), np.array(Y))
                     del X
                     del Y
@@ -151,7 +153,9 @@ class NNModelTrainer:
             
             # Boundary Treatment
             if len(X) > 0:
+                print("yielding data " + str(len(X)), str(len(Y)))
                 if len(Y) == len(X):
+                    print("yielding data " + str(len(X)), str(len(Y)))
                     yield (np.array(X), np.array(Y))
                 del X
                 del Y
@@ -169,6 +173,27 @@ class NNModelTrainer:
 
     def fitGeneratorValid(self):
         self._dataGenerator(sample_type="valid")
+    
+    def loadValidData(self):
+        df = self.loadChunkValid(chunk_index=0)
+        # Start processing data via block
+        df_length = df.shape[0]
+        row_index = 0
+        
+        X = []
+        Y = []
+        
+        while row_index <= df_length - self.BLOCK_SIZE:
+            img_ = self.getSpectrum(
+                df["strain"][row_index: row_index + self.BLOCK_SIZE])
+            img_ = np.stack(self._num_channel * [img_], axis=-1)
+            assert img_.shape == (self.IMG_HEIGHT, self.IMG_WIDTH, self._num_channel)
+            tar_ = df["time"].loc[row_index + self.BLOCK_SIZE - 1]
+            X.append(img_)
+            Y.append(tar_)
+            row_index += self.BLOCK_STRIDE
+        return np.array(X), np.array(Y)
+        
 
 
     def loadModel(self, model):
@@ -237,7 +262,8 @@ class NNModelTrainer:
 
         # Need manually setted when self.BLOCK_STRIDE is modified.
         train_steps = self.NUM_TRAIN_STEPS
-        valid_steps = self.NUM_VALID_STEPS
+        valid_data = self.loadValidData()
+        print("Start training ...")
 
         history = self._model.fit_generator(
             self.fitGeneratorTrain(),
@@ -245,8 +271,7 @@ class NNModelTrainer:
             epochs=epochs,
             verbose=1, 
             callbacks=[earlystopper, checkpointer, change_lr],
-            validation_data=self.fitGeneratorValid(),
-            validation_steps=valid_steps)
+            validation_data=valid_data)
         return history
 
 
@@ -333,6 +358,7 @@ class NNModelTrainerTest:
             NAME=sys._getframe().f_code.co_name,
             TIME=str(time.time() - t_start)))
     
+    
     def testTemplate(self):
         t_start = time.time()
         print("\n== Testing {NAME} ==".format(NAME=sys._getframe().f_code.co_name))
@@ -380,11 +406,12 @@ class NNModelTrainerTest:
         print("Time Usage for {NAME}: {TIME} sec\n\n".format(
             NAME=sys._getframe().f_code.co_name,
             TIME=str(time.time() - t_start)))
+    
         
 
     def testRun(self):
-        self.testLoadChunks()
-        self.testGetSpectrum()
+        # self.testLoadChunks()
+        # self.testGetSpectrum()
         self.testFitGenerator()
 
 
