@@ -28,10 +28,10 @@ EPD = 2                                     # Epochs per decaying
 class NNModelTrainer:
     """ Provide util methods for NN usage """
     # loading data via chunks to void memory explosion
-    NUM_TRAIN_CHUNKS = 6
-    NUM_VALID_CHUNKS = 1
-    NUM_TRAIN_STEPS = 3378
-    NUM_VALID_STEPS = 557
+    NUM_TRAIN_CHUNKS = 5
+    NUM_VALID_CHUNKS = 2
+    NUM_TRAIN_STEPS = 2815
+    NUM_VALID_STEPS = 1120
 
     # Block parameters that are processed with fft
     BLOCK_SIZE = 100000
@@ -104,7 +104,7 @@ class NNModelTrainer:
         return spec
     
     
-    def _dataGenerator(self, sample_type="train"):
+    def fitGenerator(self, sample_type="train"):
         sample_type = sample_type.lower()
         assert sample_type in ["train", "valid"], "Invalid sample type: " + str(sample_type)
 
@@ -167,12 +167,6 @@ class NNModelTrainer:
             del df
             gc.collect()
             chunk_index = (chunk_index + 1) % num_chunks
-
-    def fitGeneratorTrain(self):
-        self._dataGenerator(sample_type="train")
-
-    def fitGeneratorValid(self):
-        self._dataGenerator(sample_type="valid")
     
     def loadValidData(self):
         df = self.loadChunkValid(chunk_index=0)
@@ -261,17 +255,21 @@ class NNModelTrainer:
         checkpointer = ModelCheckpoint(filepath=checker_file, monitor='val_loss', verbose=1, save_best_only=True, mode='auto')
 
         # Need manually setted when self.BLOCK_STRIDE is modified.
+        train_generator = self.fitGenerator(sample_type="train")
         train_steps = self.NUM_TRAIN_STEPS
-        valid_data = self.loadValidData()
+        valid_generator = self.fitGenerator(sample_type="valid")
+        valid_steps = self.NUM_VALID_STEPS
+
         print("Start training ...")
 
         history = self._model.fit_generator(
-            self.fitGeneratorTrain(),
+            train_generator,
             steps_per_epoch=train_steps,
             epochs=epochs,
             verbose=1, 
             callbacks=[earlystopper, checkpointer, change_lr],
-            validation_data=valid_data)
+            validation_data=valid_generator,
+            validation_steps=valid_steps)
         return history
 
 
@@ -350,8 +348,7 @@ class NNModelTrainerTest:
     def testFitGenerator(self):
         t_start = time.time()
         print("\n== Testing {NAME} ==".format(NAME=sys._getframe().f_code.co_name))
-        self._trainer.fitGeneratorTrain()
-        self._trainer.fitGeneratorValid()
+        self._trainer.fitGenerator()
         
         print("-------------")
         print("Time Usage for {NAME}: {TIME} sec\n\n".format(
