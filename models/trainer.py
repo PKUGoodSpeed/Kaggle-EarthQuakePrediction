@@ -15,7 +15,7 @@ from datetime import datetime
 from keras.optimizers import Adam
 from keras.callbacks import LearningRateScheduler, Callback, EarlyStopping, ModelCheckpoint
 
-ROOT = "/home/goodspeed/workspace/kaggle/earthquake"
+ROOT = "/home/eason/repos/earthquake"
 sys.path.append(ROOT)                       # Add root directory to the import path
 
 from utils.h5io import load_from_h5
